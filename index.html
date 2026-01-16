@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>현대몰 페어 자동 분배</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            margin-bottom: 15px;
+            color: #444;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+
+        /* 입력 영역 */
+        .input-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .input-group label {
+            font-weight: 600;
+            color: #555;
+        }
+        .input-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        /* 상품 테이블 */
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .product-table th, .product-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .product-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .product-table input {
+            width: 100px;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .product-table .required {
+            background: #fff3cd;
+        }
+        .product-table input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        /* 버튼 */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* 결과 영역 */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        .person-card {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+        }
+        .person-card.tier-50 {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .person-card.tier-40 {
+            border-color: #ffc107;
+            background: #fff3cd;
+        }
+        .person-card.tier-30 {
+            border-color: #17a2b8;
+            background: #d1ecf1;
+        }
+        .person-card.tier-under {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .person-card.completed {
+            border-color: #6c757d;
+            background: #e9ecef;
+            opacity: 0.7;
+        }
+        .person-card h3 {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .progress-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #6c757d;
+            color: white;
+            margin-left: 8px;
+        }
+        .progress-badge.done {
+            background: #28a745;
+        }
+        .person-card .total {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .person-card ul {
+            list-style: none;
+            font-size: 0.9rem;
+        }
+        .person-card li {
+            padding: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+        .person-card li:last-child {
+            border-bottom: none;
+        }
+        .person-card li.ordered {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+        .person-card li.ordered .order-check {
+            background: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+        .order-check {
+            width: 22px;
+            height: 22px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            margin-right: 8px;
+        }
+        .order-check:hover {
+            border-color: #28a745;
+        }
+        .item-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+        .item-name {
+            flex: 1;
+        }
+
+        /* 재고 표시 */
+        .stock-info {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        /* 요약 */
+        .summary {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .summary-item {
+            padding: 10px 20px;
+            background: #e9ecef;
+            border-radius: 6px;
+        }
+        .summary-item strong {
+            display: block;
+            font-size: 1.3rem;
+            color: #333;
+        }
+
+        /* 인원 체크박스 */
+        .person-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .person-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .person-checkbox:hover {
+            border-color: #007bff;
+        }
+        .person-checkbox.selected {
+            background: #007bff;
+            border-color: #007bff;
+            color: white;
+        }
+        .person-checkbox input {
+            display: none;
+        }
+
+        /* 사입 항목 스타일 */
+        .buy-item {
+            background: #e8f5e9 !important;
+        }
+        .buy-item .item-name {
+            color: #2e7d32;
+        }
+        .section-divider {
+            text-align: center;
+            color: #666;
+            font-size: 0.8rem;
+            padding: 8px 0 !important;
+            border-bottom: none !important;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🛒 현대몰 페어 자동 분배</h1>
+
+    <!-- 인원 선택 -->
+    <div class="section">
+        <h2>👥 분배 대상 선택</h2>
+        <div class="person-checkboxes" id="personCheckboxes">
+            <!-- JS로 동적 생성 -->
+        </div>
+        <div class="btn-group" style="margin-top: 15px;">
+            <button class="btn btn-secondary" onclick="selectAllPersons()">전체 선택</button>
+            <button class="btn btn-secondary" onclick="deselectAllPersons()">전체 해제</button>
+        </div>
+    </div>
+
+    <!-- 상품 목록 및 가격/재고 입력 -->
+    <div class="section">
+        <h2>📦 상품 목록 (가격/재고 입력)</h2>
+        <div class="btn-group" style="margin-bottom: 15px;">
+            <button class="btn btn-secondary" onclick="copyStockData()">📋 재고 데이터 복사</button>
+            <button class="btn btn-secondary" onclick="showPasteModal()">📥 재고 데이터 붙여넣기</button>
+        </div>
+        <table class="product-table">
+            <thead>
+                <tr>
+                    <th>상품명</th>
+                    <th>가격 (원)</th>
+                    <th>위탁</th>
+                    <th>사입</th>
+                    <th>구분</th>
+                </tr>
+            </thead>
+            <tbody id="productTableBody">
+                <!-- JS로 동적 생성 -->
+            </tbody>
+        </table>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="runDistribution()">🚀 분배 실행</button>
+            <button class="btn btn-secondary" onclick="saveToLocalStorage()">💾 저장</button>
+            <button class="btn btn-secondary" onclick="resetAll()">🔄 초기화</button>
+            <button class="btn btn-secondary" onclick="clearDistribution()" style="background: #dc3545;">🗑️ 분배 초기화</button>
+        </div>
+    </div>
+
+    <!-- 분배 결과 -->
+    <div class="section" id="resultsSection" style="display: none;">
+        <h2>📊 분배 결과 <span id="distributionTime" style="font-size: 0.8rem; font-weight: normal; color: #666;"></span></h2>
+        <div class="summary" id="summary"></div>
+        <div class="results-grid" id="resultsGrid"></div>
+    </div>
+
+    <!-- 붙여넣기 모달 -->
+    <div id="pasteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 500px;">
+            <h3 style="margin-bottom: 15px;">📥 재고 데이터 붙여넣기</h3>
+            <textarea id="pasteArea" style="width: 100%; height: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 12px;" placeholder="복사한 재고 데이터를 여기에 붙여넣기 하세요..."></textarea>
+            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closePasteModal()">취소</button>
+                <button class="btn btn-primary" onclick="applyPastedData()">적용</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 27명 고정 인원
+        const persons = [
+            '환준', '순란', '상복', '민후', '도현', '영오', '재혁', '환국', '우성',
+            '기봉', '준현', '익선', '정현', '성태', '연식', '상현', '세용', '민규',
+            '병현', '성범', '태협', '건호', '규성', '수민', '재훈', '민제', '형욱'
+        ];
+
+        // 상품 데이터 (stock: 위탁, buyStock: 사입)
+        const products = [
+            // 필수 상품
+            { id: 1, name: '락토핏 골드 6통', price: 49735, stock: 5, buyStock: 0, required: true },
+            { id: 2, name: '루지아 6박스', price: 61800, stock: 5, buyStock: 0, required: true },
+            // 일반 상품
+            { id: 3, name: '예민한 장', price: 42600, stock: 0, buyStock: 0, required: false },
+            { id: 4, name: '둔감한 장', price: 43096, stock: 0, buyStock: 0, required: false },
+            { id: 5, name: '멀티비타민', price: 48890, stock: 0, buyStock: 0, required: false },
+            { id: 6, name: '프로메가 장용성 오메가3', price: 78650, stock: 0, buyStock: 0, required: false },
+            { id: 7, name: '비에날씬 프로', price: 147310, stock: 0, buyStock: 0, required: false },
+            { id: 8, name: '비에날씬 일반', price: 149660, stock: 0, buyStock: 0, required: false },
+            { id: 9, name: '락토핏 골드 10통', price: 82110, stock: 0, buyStock: 0, required: false },
+            { id: 10, name: '락토핏 슬림 6통', price: 92750, stock: 0, buyStock: 0, required: false },
+            { id: 11, name: '루테인 10통', price: 51978, stock: 0, buyStock: 0, required: false },
+            { id: 12, name: '닥터린 초임계 오메가3 12개', price: 79762, stock: 0, buyStock: 0, required: false },
+            { id: 13, name: '닥터린 하이퍼셀', price: 136260, stock: 0, buyStock: 0, required: false },
+            { id: 14, name: '종근당 루테인 오메가3', price: 37575, stock: 0, buyStock: 0, required: false },
+            { id: 15, name: '초임계 오메가3 3박스', price: 21700, stock: 10, buyStock: 0, required: false },
+            { id: 16, name: '락토핏 당케어', price: 50013, stock: 10, buyStock: 0, required: false },
+            { id: 17, name: '콘드로이친 맥스 3박스', price: 48000, stock: 5, buyStock: 0, required: false },
+            { id: 18, name: '콘드로이친 맥스 5박스', price: 71430, stock: 0, buyStock: 0, required: false },
+            { id: 19, name: '양배추즙', price: 34700, stock: 0, buyStock: 0, required: false },
+            { id: 20, name: '석류 11개', price: 65203, stock: 0, buyStock: 0, required: false },
+            { id: 21, name: '이너플로라 3개', price: 50513, stock: 0, buyStock: 0, required: false },
+            { id: 22, name: '테크 8L', price: 15800, stock: 0, buyStock: 0, required: false },
+            { id: 23, name: '콤비타 마누카꿀', price: 59427, stock: 0, buyStock: 0, required: false },
+            { id: 24, name: '비비랩 콜라겐', price: 86211, stock: 0, buyStock: 0, required: false },
+            { id: 25, name: '셀렉스 로우슈거 125ml x48', price: 42600, stock: 0, buyStock: 0, required: false },
+            { id: 26, name: '셀렉스 로우슈거 190ml x48', price: 50140, stock: 0, buyStock: 0, required: false },
+            { id: 27, name: '키친타올 140매', price: 11439, stock: 0, buyStock: 0, required: false },
+            { id: 28, name: '정관장 홍삼 에브리타임 필름 60매', price: 76870, stock: 0, buyStock: 0, required: false },
+            { id: 29, name: '모던에디션 베스트', price: 99200, stock: 0, buyStock: 0, required: false },
+        ];
+
+        // 목표 금액 범위
+        const TARGET_TIERS = [
+            { min: 500000, max: 515000, name: '50만', class: 'tier-50' },
+            { min: 400000, max: 415000, name: '40만', class: 'tier-40' },
+            { min: 300000, max: 315000, name: '30만', class: 'tier-30' },
+        ];
+        const MIN_ORDER = 50000; // 최소 5만원
+
+        // 초기화
+        function init() {
+            loadFromLocalStorage();
+            renderPersonCheckboxes();
+            restoreSelectedPersons();
+            renderProductTable();
+        }
+
+        // 인원 체크박스 렌더링
+        function renderPersonCheckboxes() {
+            const container = document.getElementById('personCheckboxes');
+            container.innerHTML = '';
+
+            persons.forEach((name, index) => {
+                const label = document.createElement('label');
+                label.className = 'person-checkbox selected';
+                label.innerHTML = `
+                    <input type="checkbox" id="person_${index}" checked onchange="togglePerson(this)">
+                    <span>${name}</span>
+                `;
+                container.appendChild(label);
+            });
+        }
+
+        // 인원 토글
+        function togglePerson(checkbox) {
+            const label = checkbox.parentElement;
+            if (checkbox.checked) {
+                label.classList.add('selected');
+            } else {
+                label.classList.remove('selected');
+            }
+        }
+
+        // 전체 선택
+        function selectAllPersons() {
+            persons.forEach((_, index) => {
+                const checkbox = document.getElementById(`person_${index}`);
+                checkbox.checked = true;
+                checkbox.parentElement.classList.add('selected');
+            });
+        }
+
+        // 전체 해제
+        function deselectAllPersons() {
+            persons.forEach((_, index) => {
+                const checkbox = document.getElementById(`person_${index}`);
+                checkbox.checked = false;
+                checkbox.parentElement.classList.remove('selected');
+            });
+        }
+
+        // 선택된 인원 가져오기
+        function getSelectedPersons() {
+            const selected = [];
+            persons.forEach((name, index) => {
+                const checkbox = document.getElementById(`person_${index}`);
+                if (checkbox && checkbox.checked) {
+                    selected.push(name);
+                }
+            });
+            return selected;
+        }
+
+        // 상품 테이블 렌더링
+        function renderProductTable() {
+            const tbody = document.getElementById('productTableBody');
+            tbody.innerHTML = '';
+
+            products.forEach(product => {
+                const tr = document.createElement('tr');
+                tr.className = product.required ? 'required' : '';
+                tr.innerHTML = `
+                    <td>${product.name}</td>
+                    <td><input type="number" id="price_${product.id}" value="${product.price}" min="0" step="1000" onchange="updateProduct(${product.id})"></td>
+                    <td><input type="number" id="stock_${product.id}" value="${product.stock}" min="0" onchange="updateProduct(${product.id})"></td>
+                    <td><input type="number" id="buyStock_${product.id}" value="${product.buyStock}" min="0" onchange="updateProduct(${product.id})" style="background: #e8f5e9;"></td>
+                    <td>${product.required ? '⭐ 필수' : '일반'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 상품 정보 업데이트
+        function updateProduct(id) {
+            const product = products.find(p => p.id === id);
+            if (product) {
+                product.price = parseInt(document.getElementById(`price_${id}`).value) || 0;
+                product.stock = parseInt(document.getElementById(`stock_${id}`).value) || 0;
+                product.buyStock = parseInt(document.getElementById(`buyStock_${id}`).value) || 0;
+            }
+        }
+
+        // 아이디당 1개 제한 상품 (ID 기준)
+        const LIMITED_PRODUCTS = [1, 9, 2, 12]; // 락토핏 골드 6통, 락토핏 골드 10통, 루지아 6박스, 닥터린 초임계 오메가3 12개
+
+        // 무제한 상품 (최대 10개) - ID 기준
+        const UNLIMITED_PRODUCTS = [6, 3, 4, 5, 11, 14, 21, 22, 27, 10, 16];
+        // 프로메가 장용성 오메가3, 예민한 장, 둔감한 장, 멀티비타민, 루테인 10통, 종근당 루테인 오메가3, 이너플로라 3개, 테크 8L, 키친타올 140매, 락토핏 슬림 6통, 락토핏 당케어
+
+        // 한 아이디에 몰아주는 상품 (가능한 한 사람에게 최대치까지)
+        const CONSOLIDATE_PRODUCTS = [27, 22]; // 키친타올 140매, 테크 8L
+
+        const MAX_SAME_PRODUCT = 3; // 일반 상품 최대 구매 개수
+        const MAX_UNLIMITED_PRODUCT = 10; // 무제한 상품 최대 구매 개수
+
+        // 한 사람에게 특정 tier를 채울 수 있는지 시뮬레이션
+        function tryFillTier(personName, tier, stockRemaining, mustIncludeLactofit10) {
+            const result = {
+                personName: personName,
+                items: [],
+                total: 0,
+                tier: null,
+                productCounts: {}
+            };
+
+            const tempStock = { ...stockRemaining };
+
+            // 1단계: 필수 상품 분배
+            const requiredProducts = products.filter(p => p.required && p.price > 0);
+            for (const product of requiredProducts) {
+                if (tempStock[product.id] > 0) {
+                    result.items.push({ ...product, qty: 1 });
+                    result.total += product.price;
+                    result.productCounts[product.id] = 1;
+                    tempStock[product.id]--;
+                }
+            }
+
+            // 1-2단계: 락토핏 골드 10통 필수 분배 (요청된 경우)
+            if (mustIncludeLactofit10) {
+                const lactofit10 = products.find(p => p.id === 9);
+                if (lactofit10 && lactofit10.price > 0 && tempStock[9] > 0 && !result.productCounts[9]) {
+                    result.items.push({ ...lactofit10, qty: 1 });
+                    result.total += lactofit10.price;
+                    result.productCounts[9] = 1;
+                    tempStock[9]--;
+                } else if (mustIncludeLactofit10) {
+                    return null; // 10통 필수인데 재고 없으면 실패
+                }
+            }
+
+            const targetMin = tier.min;
+            const targetMax = tier.max;
+
+            // 이미 목표 범위 내면 성공
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = tier;
+                return { result, usedStock: tempStock };
+            }
+
+            // 목표 초과면 실패
+            if (result.total > targetMax) {
+                return null;
+            }
+
+            // 목표 채우기 시도
+            let improved = true;
+            while (improved && result.total < targetMin) {
+                improved = false;
+
+                const availableProducts = products
+                    .filter(p => {
+                        if (p.price <= 0 || tempStock[p.id] <= 0) return false;
+                        const currentQty = result.productCounts[p.id] || 0;
+
+                        if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                        if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                        return currentQty < MAX_SAME_PRODUCT;
+                    })
+                    .sort((a, b) => b.price - a.price);
+
+                for (const product of availableProducts) {
+                    const newTotal = result.total + product.price;
+
+                    if (newTotal <= targetMax) {
+                        const existingItem = result.items.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.qty++;
+                        } else {
+                            result.items.push({ ...product, qty: 1 });
+                        }
+                        result.total = newTotal;
+                        result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+                        tempStock[product.id]--;
+                        improved = true;
+
+                        if (result.total >= targetMin && result.total <= targetMax) {
+                            result.tier = tier;
+                            return { result, usedStock: tempStock };
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 목표 달성 체크
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = tier;
+                return { result, usedStock: tempStock };
+            }
+
+            return null; // 실패
+        }
+
+        // 분배 실행 - 필수 상품 재고 기준으로 사용 아이디 수 결정
+        function runDistribution() {
+            products.forEach(p => updateProduct(p.id));
+
+            const selectedPersons = getSelectedPersons();
+            if (selectedPersons.length === 0) {
+                alert('최소 1명 이상 선택해주세요.');
+                return;
+            }
+
+            // 재고 복사 (위탁 + 사입 = 총 재고)
+            let stockRemaining = {};
+            let buyStockInfo = {}; // 사입 재고 추적용
+            products.forEach(p => {
+                stockRemaining[p.id] = p.stock + p.buyStock; // 총 재고
+                buyStockInfo[p.id] = p.buyStock; // 사입 개수 저장
+            });
+
+            // 필수 상품 3종 재고 확인 (총 재고 기준)
+            // 락토핏 골드 6통(1), 루지아 6박스(2), 락토핏 골드 10통(9)
+            const lactofit6Stock = stockRemaining[1] || 0;   // 락토핏 골드 6통
+            const luziaStock = stockRemaining[2] || 0;       // 루지아 6박스
+            const lactofit10Stock = stockRemaining[9] || 0;  // 락토핏 골드 10통
+
+            // 필수 상품 중 가장 많은 재고 = 사용할 아이디 수
+            const maxRequiredStock = Math.max(lactofit6Stock, luziaStock, lactofit10Stock);
+
+            if (maxRequiredStock === 0) {
+                alert('필수 상품(락토핏 6통, 루지아, 락토핏 10통) 재고가 없습니다.');
+                return;
+            }
+
+            // 사용할 아이디 수 = min(선택된 인원, 필수 상품 최대 재고)
+            const targetPersons = Math.min(selectedPersons.length, maxRequiredStock);
+
+            console.log(`=== 분배 시작 ===`);
+            console.log(`필수 상품 재고: 락골6통=${lactofit6Stock}, 루지아=${luziaStock}, 락골10통=${lactofit10Stock}`);
+            console.log(`사용 아이디 수: ${targetPersons}명 (max 기준)`);
+
+            // 각 아이디에 필수 상품 우선 분배 계획
+            // 1. 각 아이디가 받을 필수 상품 결정 (재고 있는 만큼만)
+            const personAssignments = [];
+
+            for (let i = 0; i < targetPersons; i++) {
+                const personName = selectedPersons[i];
+                const assignment = {
+                    personName: personName,
+                    lactofit6: i < lactofit6Stock,    // 재고 있으면 1개
+                    luzia: i < luziaStock,            // 재고 있으면 1개
+                    lactofit10: i < lactofit10Stock,  // 재고 있으면 1개
+                };
+                personAssignments.push(assignment);
+            }
+
+            // 2. 필수 상품 분배 후 남은 재고 계산
+            let workingStock = { ...stockRemaining };
+            workingStock[1] = Math.max(0, lactofit6Stock - targetPersons);   // 락골6통 남은 재고
+            workingStock[2] = Math.max(0, luziaStock - targetPersons);       // 루지아 남은 재고
+            workingStock[9] = Math.max(0, lactofit10Stock - targetPersons);  // 락골10통 남은 재고
+
+            // 3. 각 아이디별 기본 금액 계산 (필수 상품 합계)
+            const lactofit6Price = products.find(p => p.id === 1)?.price || 0;
+            const luziaPrice = products.find(p => p.id === 2)?.price || 0;
+            const lactofit10Price = products.find(p => p.id === 9)?.price || 0;
+
+            personAssignments.forEach((assignment, i) => {
+                let baseTotal = 0;
+                if (assignment.lactofit6) baseTotal += lactofit6Price;
+                if (assignment.luzia) baseTotal += luziaPrice;
+                if (assignment.lactofit10) baseTotal += lactofit10Price;
+                assignment.baseTotal = baseTotal;
+                console.log(`${assignment.personName}: 필수품 합계 ${baseTotal.toLocaleString()}원`);
+            });
+
+            // 4. 각 아이디에게 tier 채우기 (30만 → 40만 → 50만 순으로 보수적 접근)
+            const finalResults = [];
+            let currentStock = { ...workingStock };
+
+            for (let i = 0; i < targetPersons; i++) {
+                const assignment = personAssignments[i];
+                const personName = assignment.personName;
+                const remainingPersons = targetPersons - i - 1;
+
+                // 기본 결과 (필수 상품만)
+                const result = {
+                    personName: personName,
+                    items: [],
+                    total: 0,
+                    tier: null,
+                    productCounts: {}
+                };
+
+                // 필수 상품 추가
+                if (assignment.lactofit6) {
+                    const product = products.find(p => p.id === 1);
+                    result.items.push({ ...product, qty: 1 });
+                    result.total += product.price;
+                    result.productCounts[1] = 1;
+                }
+                if (assignment.luzia) {
+                    const product = products.find(p => p.id === 2);
+                    result.items.push({ ...product, qty: 1 });
+                    result.total += product.price;
+                    result.productCounts[2] = 1;
+                }
+                if (assignment.lactofit10) {
+                    const product = products.find(p => p.id === 9);
+                    result.items.push({ ...product, qty: 1 });
+                    result.total += product.price;
+                    result.productCounts[9] = 1;
+                }
+
+                // 1단계: 30만원 달성 시도 (모든 아이디가 최소 tier 달성 우선)
+                const tier30Result = tryFillTierMaximize(result, TARGET_TIERS[2], currentStock);
+                if (tier30Result) {
+                    finalResults.push(tier30Result.result);
+                    currentStock = tier30Result.usedStock;
+                    console.log(`${personName}: 30만 달성 (${tier30Result.result.total.toLocaleString()}원)`);
+                } else {
+                    // 30만원도 안 되면 미달
+                    result.tier = { name: '미달', class: 'tier-under' };
+                    finalResults.push(result);
+                    console.log(`${personName}: 미달 (${result.total.toLocaleString()}원)`);
+                }
+            }
+
+            // 2단계: 남은 재고로 tier 업그레이드 시도 (30만 → 40만 → 50만)
+            currentStock = upgradeTiers(finalResults, currentStock);
+
+            // 사입 항목 계산 (각 상품별로 뒤에서부터 사입 개수만큼 사입으로 표시)
+            const buyAssignments = calculateBuyAssignments(finalResults, buyStockInfo);
+
+            displayResults(finalResults, currentStock, buyAssignments);
+
+            // 분배 결과 저장
+            saveDistributionResults(finalResults, currentStock, buyAssignments);
+
+            // 위탁/사입 재고 데이터도 자동 저장
+            saveToLocalStorageSilent();
+        }
+
+        // 2단계: 남은 재고로 tier 업그레이드 (30만→40만→50만)
+        function upgradeTiers(results, stockRemaining) {
+            let currentStock = { ...stockRemaining };
+            let upgraded = true;
+
+            while (upgraded) {
+                upgraded = false;
+
+                // 30만원대인 아이디 찾아서 40만원대로 업그레이드 시도
+                for (let i = 0; i < results.length; i++) {
+                    const result = results[i];
+                    if (result.tier?.name === '30만') {
+                        const upgradeResult = tryUpgradeToTier(result, TARGET_TIERS[1], currentStock); // 40만
+                        if (upgradeResult) {
+                            results[i] = upgradeResult.result;
+                            currentStock = upgradeResult.usedStock;
+                            upgraded = true;
+                            console.log(`${result.personName}: 30만 → 40만 업그레이드`);
+                            break;
+                        }
+                    }
+                }
+
+                // 40만원대인 아이디 찾아서 50만원대로 업그레이드 시도
+                if (!upgraded) {
+                    for (let i = 0; i < results.length; i++) {
+                        const result = results[i];
+                        if (result.tier?.name === '40만') {
+                            const upgradeResult = tryUpgradeToTier(result, TARGET_TIERS[0], currentStock); // 50만
+                            if (upgradeResult) {
+                                results[i] = upgradeResult.result;
+                                currentStock = upgradeResult.usedStock;
+                                upgraded = true;
+                                console.log(`${result.personName}: 40만 → 50만 업그레이드`);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 30만원대를 바로 50만원대로 업그레이드 시도 (40만 건너뛰기)
+                if (!upgraded) {
+                    for (let i = 0; i < results.length; i++) {
+                        const result = results[i];
+                        if (result.tier?.name === '30만') {
+                            const upgradeResult = tryUpgradeToTier(result, TARGET_TIERS[0], currentStock); // 50만
+                            if (upgradeResult) {
+                                results[i] = upgradeResult.result;
+                                currentStock = upgradeResult.usedStock;
+                                upgraded = true;
+                                console.log(`${result.personName}: 30만 → 50만 업그레이드`);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return currentStock;
+        }
+
+        // tier 업그레이드 시도 (현재 아이템에 추가해서 상위 tier 달성)
+        function tryUpgradeToTier(currentResult, targetTier, stockRemaining) {
+            const result = {
+                personName: currentResult.personName,
+                items: currentResult.items.map(item => ({ ...item })),
+                total: currentResult.total,
+                tier: null,
+                productCounts: { ...currentResult.productCounts }
+            };
+
+            const tempStock = { ...stockRemaining };
+            const targetMin = targetTier.min;
+            const targetMax = targetTier.max;
+
+            // 이미 목표 초과면 불가
+            if (result.total > targetMax) {
+                return null;
+            }
+
+            // 목표 채우기 시도
+            let improved = true;
+            while (improved && result.total < targetMin) {
+                improved = false;
+
+                const availableProducts = products
+                    .filter(p => {
+                        if (p.required) return false;
+                        if (p.price <= 0 || tempStock[p.id] <= 0) return false;
+                        const currentQty = result.productCounts[p.id] || 0;
+
+                        if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                        if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                        return currentQty < MAX_SAME_PRODUCT;
+                    })
+                    .sort((a, b) => {
+                        // 몰아주기 상품 우선
+                        const aConsolidate = CONSOLIDATE_PRODUCTS.includes(a.id) && (result.productCounts[a.id] || 0) > 0;
+                        const bConsolidate = CONSOLIDATE_PRODUCTS.includes(b.id) && (result.productCounts[b.id] || 0) > 0;
+                        if (aConsolidate && !bConsolidate) return -1;
+                        if (!aConsolidate && bConsolidate) return 1;
+                        return b.price - a.price;
+                    });
+
+                for (const product of availableProducts) {
+                    const newTotal = result.total + product.price;
+
+                    if (newTotal <= targetMax) {
+                        const existingItem = result.items.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.qty++;
+                        } else {
+                            result.items.push({ ...product, qty: 1 });
+                        }
+                        result.total = newTotal;
+                        result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+                        tempStock[product.id]--;
+                        improved = true;
+
+                        if (result.total >= targetMin && result.total <= targetMax) {
+                            result.tier = targetTier;
+                            return { result, usedStock: tempStock };
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 목표 달성 체크
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = targetTier;
+                return { result, usedStock: tempStock };
+            }
+
+            return null;
+        }
+
+        // 재고 소진 최대화 - tier 채우기 (남은 인원 체크 없이, 최대한 채움)
+        function tryFillTierMaximize(baseResult, tier, stockRemaining) {
+            const result = {
+                personName: baseResult.personName,
+                items: baseResult.items.map(item => ({ ...item })),
+                total: baseResult.total,
+                tier: null,
+                productCounts: { ...baseResult.productCounts }
+            };
+
+            const tempStock = { ...stockRemaining };
+            const targetMin = tier.min;
+            const targetMax = tier.max;
+
+            // 이미 목표 범위 내면 성공
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = tier;
+                return { result, usedStock: tempStock };
+            }
+
+            // 목표 초과면 실패
+            if (result.total > targetMax) {
+                return null;
+            }
+
+            // 목표 채우기 시도
+            let improved = true;
+            while (improved && result.total < targetMin) {
+                improved = false;
+
+                const availableProducts = products
+                    .filter(p => {
+                        if (p.required) return false;
+                        if (p.price <= 0 || tempStock[p.id] <= 0) return false;
+                        const currentQty = result.productCounts[p.id] || 0;
+
+                        if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                        if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                        return currentQty < MAX_SAME_PRODUCT;
+                    })
+                    .sort((a, b) => {
+                        // 몰아주기 상품 우선 (키친타올 등) - 이미 해당 상품을 가지고 있으면 더 우선
+                        const aConsolidate = CONSOLIDATE_PRODUCTS.includes(a.id) && (result.productCounts[a.id] || 0) > 0;
+                        const bConsolidate = CONSOLIDATE_PRODUCTS.includes(b.id) && (result.productCounts[b.id] || 0) > 0;
+                        if (aConsolidate && !bConsolidate) return -1;
+                        if (!aConsolidate && bConsolidate) return 1;
+                        return b.price - a.price;
+                    });
+
+                for (const product of availableProducts) {
+                    const newTotal = result.total + product.price;
+
+                    if (newTotal <= targetMax) {
+                        const existingItem = result.items.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.qty++;
+                        } else {
+                            result.items.push({ ...product, qty: 1 });
+                        }
+                        result.total = newTotal;
+                        result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+                        tempStock[product.id]--;
+                        improved = true;
+
+                        if (result.total >= targetMin && result.total <= targetMax) {
+                            result.tier = tier;
+                            return { result, usedStock: tempStock };
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 목표 달성 체크
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = tier;
+                return { result, usedStock: tempStock };
+            }
+
+            return null;
+        }
+
+        // 사입 항목 계산 - 상품별로 5만원 이상 되도록 한 아이디에 몰아주기
+        const MIN_BUY_AMOUNT = 50000; // 사입 최소 금액
+
+        function calculateBuyAssignments(results, buyStockInfo) {
+            // 1. 각 아이디가 어떤 상품을 몇 개 가지고 있는지 매핑
+            const personProducts = {}; // { personIndex: { productId: qty, ... } }
+
+            results.forEach((result, personIndex) => {
+                personProducts[personIndex] = {};
+                result.items.forEach(item => {
+                    personProducts[personIndex][item.id] = item.qty;
+                });
+            });
+
+            // 2. 사입 배정 결과
+            const buyAssignments = {}; // { personIndex: { productId: buyQty, ... } }
+
+            // 3. 남은 사입 재고 복사
+            const remainingBuyStock = { ...buyStockInfo };
+
+            // 4. 상품별로 처리
+            const productsWithBuyStock = products
+                .filter(p => remainingBuyStock[p.id] > 0)
+                .sort((a, b) => b.price - a.price);
+
+            for (const product of productsWithBuyStock) {
+                const productId = product.id;
+                let buyStockLeft = remainingBuyStock[productId];
+                if (buyStockLeft <= 0) continue;
+
+                // 이 상품 1개가 5만원 이상인지 확인
+                const needsGrouping = product.price < MIN_BUY_AMOUNT;
+                // 5만원 채우려면 몇 개 필요한지
+                const minQtyFor50k = needsGrouping ? Math.ceil(MIN_BUY_AMOUNT / product.price) : 1;
+
+                // 이 상품을 가진 아이디들 찾기 (뒤에서부터)
+                const personsWithProduct = [];
+                results.forEach((result, personIndex) => {
+                    const qty = personProducts[personIndex][productId] || 0;
+                    if (qty > 0) {
+                        personsWithProduct.push({ personIndex, qty });
+                    }
+                });
+                personsWithProduct.reverse();
+
+                // 5만원 미만 상품: 한 아이디에 5만원 이상 되도록 몰아주기
+                if (needsGrouping) {
+                    for (const { personIndex, qty } of personsWithProduct) {
+                        if (buyStockLeft <= 0) break;
+
+                        const alreadyAssigned = buyAssignments[personIndex]?.[productId] || 0;
+                        const canAssign = Math.min(qty - alreadyAssigned, buyStockLeft);
+
+                        // 5만원 채울 수 있는 개수가 있을 때만 배정
+                        if (canAssign >= minQtyFor50k) {
+                            // 5만원 이상 되는 최소 개수만 배정 (나머지는 다른 아이디에)
+                            const toAssign = minQtyFor50k;
+
+                            if (!buyAssignments[personIndex]) {
+                                buyAssignments[personIndex] = {};
+                            }
+                            buyAssignments[personIndex][productId] = toAssign;
+                            buyStockLeft -= toAssign;
+                        }
+                    }
+
+                    // 남은 사입 재고 처리 (5만원 못 채우더라도 배정)
+                    if (buyStockLeft > 0) {
+                        for (const { personIndex, qty } of personsWithProduct) {
+                            if (buyStockLeft <= 0) break;
+
+                            const alreadyAssigned = buyAssignments[personIndex]?.[productId] || 0;
+                            const canAssign = Math.min(qty - alreadyAssigned, buyStockLeft);
+
+                            if (canAssign > 0) {
+                                if (!buyAssignments[personIndex]) {
+                                    buyAssignments[personIndex] = {};
+                                }
+                                buyAssignments[personIndex][productId] = (buyAssignments[personIndex][productId] || 0) + canAssign;
+                                buyStockLeft -= canAssign;
+                            }
+                        }
+                    }
+                } else {
+                    // 5만원 이상 상품: 기존처럼 뒤에서부터 1개씩 배정
+                    for (const { personIndex, qty } of personsWithProduct) {
+                        if (buyStockLeft <= 0) break;
+
+                        const alreadyAssigned = buyAssignments[personIndex]?.[productId] || 0;
+                        const canAssign = Math.min(qty - alreadyAssigned, buyStockLeft);
+
+                        if (canAssign > 0) {
+                            if (!buyAssignments[personIndex]) {
+                                buyAssignments[personIndex] = {};
+                            }
+                            buyAssignments[personIndex][productId] = canAssign;
+                            buyStockLeft -= canAssign;
+                        }
+                    }
+                }
+            }
+
+            return buyAssignments;
+        }
+
+        // 결과 표시
+        function displayResults(results, stockRemaining, buyAssignments = {}) {
+            const section = document.getElementById('resultsSection');
+            section.style.display = 'block';
+
+            // 요약
+            const summary = document.getElementById('summary');
+            const tier50 = results.filter(r => r.tier?.name === '50만').length;
+            const tier40 = results.filter(r => r.tier?.name === '40만').length;
+            const tier30 = results.filter(r => r.tier?.name === '30만').length;
+            const tierUnder = results.filter(r => r.tier?.name === '미달' || r.tier?.name === '5만 미만').length;
+            const totalAmount = results.reduce((sum, r) => sum + r.total, 0);
+
+            summary.innerHTML = `
+                <div class="summary-item"><strong>${tier50}명</strong>50만원대</div>
+                <div class="summary-item"><strong>${tier40}명</strong>40만원대</div>
+                <div class="summary-item"><strong>${tier30}명</strong>30만원대</div>
+                <div class="summary-item"><strong>${tierUnder}명</strong>미달</div>
+                <div class="summary-item"><strong>${totalAmount.toLocaleString()}원</strong>총 주문금액</div>
+            `;
+
+            // 개인별 결과
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = '';
+
+            results.forEach((result, personIndex) => {
+                const card = document.createElement('div');
+                card.className = `person-card ${result.tier?.class || ''}`;
+                card.id = `card_${personIndex}`;
+
+                // 이 사람의 사입 항목 가져오기
+                const personBuyItems = buyAssignments[personIndex] || {};
+                const hasBuyItems = Object.keys(personBuyItems).length > 0;
+
+                // 위탁 항목과 사입 항목 분리
+                let consignmentItems = []; // 위탁
+                let buyItems = []; // 사입
+
+                result.items.forEach(item => {
+                    const buyQty = personBuyItems[item.id] || 0;
+                    const consignmentQty = item.qty - buyQty;
+
+                    if (consignmentQty > 0) {
+                        consignmentItems.push({ ...item, qty: consignmentQty });
+                    }
+                    if (buyQty > 0) {
+                        buyItems.push({ ...item, qty: buyQty });
+                    }
+                });
+
+                // 총 체크박스 개수 (위탁 + 사입)
+                const totalCheckboxCount = consignmentItems.length + buyItems.length;
+                card.dataset.itemCount = totalCheckboxCount;
+
+                // 위탁 항목 HTML
+                let itemIndex = 0;
+                const consignmentHtml = consignmentItems.map((item) => {
+                    const itemId = `order_${personIndex}_${itemIndex++}`;
+                    return `<li id="${itemId}_li">
+                        <div class="item-info">
+                            <div class="order-check" id="${itemId}" onclick="toggleOrder(${personIndex}, '${itemId}')" title="주문 완료 체크"></div>
+                            <span class="item-name">${item.name}${item.qty > 1 ? ` x${item.qty}` : ''}</span>
+                        </div>
+                        <span>${(item.price * item.qty).toLocaleString()}원</span>
+                    </li>`;
+                }).join('');
+
+                // 사입 항목 HTML
+                const buyHtml = buyItems.map((item) => {
+                    const itemId = `order_${personIndex}_${itemIndex++}`;
+                    return `<li id="${itemId}_li" class="buy-item">
+                        <div class="item-info">
+                            <div class="order-check" id="${itemId}" onclick="toggleOrder(${personIndex}, '${itemId}')" title="사입 주문 완료 체크"></div>
+                            <span class="item-name">${item.name}${item.qty > 1 ? ` x${item.qty}` : ''}</span>
+                        </div>
+                        <span>${(item.price * item.qty).toLocaleString()}원</span>
+                    </li>`;
+                }).join('');
+
+                // 구분선 및 사입 섹션
+                const buySection = hasBuyItems ? `
+                    <li class="section-divider">────── 📦 사입 ──────</li>
+                    ${buyHtml}
+                ` : '';
+
+                card.innerHTML = `
+                    <h3>
+                        <span>👤 ${result.personName}<span class="progress-badge" id="badge_${personIndex}">0/${totalCheckboxCount}</span></span>
+                        <span class="total">${result.total.toLocaleString()}원</span>
+                    </h3>
+                    <div style="margin-bottom: 8px; font-weight: 600; color: ${result.tier?.class === 'tier-under' ? '#dc3545' : '#28a745'}">
+                        ${result.tier?.name || '-'}
+                    </div>
+                    <ul>${consignmentHtml || ''}${buySection || (consignmentHtml ? '' : '<li>배정된 상품 없음</li>')}</ul>
+                `;
+                grid.appendChild(card);
+            });
+
+            // 남은 재고 표시
+            const remainingStock = products
+                .filter(p => stockRemaining[p.id] > 0)
+                .map(p => `${p.name}: ${stockRemaining[p.id]}개`)
+                .join(', ');
+
+            if (remainingStock) {
+                const stockDiv = document.createElement('div');
+                stockDiv.className = 'stock-info';
+                stockDiv.style.marginTop = '20px';
+                stockDiv.innerHTML = `<strong>📦 남은 재고:</strong> ${remainingStock}`;
+                grid.appendChild(stockDiv);
+            }
+        }
+
+        // localStorage 저장
+        function saveToLocalStorage() {
+            products.forEach(p => updateProduct(p.id));
+            const selectedPersons = getSelectedPersons();
+            const data = {
+                products: products.map(p => ({ id: p.id, price: p.price, stock: p.stock, buyStock: p.buyStock })),
+                selectedPersons: selectedPersons
+            };
+            localStorage.setItem('hyundaimall_fair', JSON.stringify(data));
+            alert('저장되었습니다!');
+        }
+
+        // localStorage 불러오기
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('hyundaimall_fair');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    if (data.products) {
+                        data.products.forEach(savedProduct => {
+                            const product = products.find(p => p.id === savedProduct.id);
+                            if (product) {
+                                product.price = savedProduct.price || 0;
+                                product.stock = savedProduct.stock || 0;
+                                product.buyStock = savedProduct.buyStock || 0;
+                            }
+                        });
+                    }
+                    // 선택된 인원 복원 (renderPersonCheckboxes 후에 적용)
+                    if (data.selectedPersons) {
+                        window.savedSelectedPersons = data.selectedPersons;
+                    }
+                } catch (e) {
+                    console.error('저장된 데이터 로드 실패:', e);
+                }
+            }
+        }
+
+        // 저장된 인원 선택 복원
+        function restoreSelectedPersons() {
+            if (window.savedSelectedPersons) {
+                persons.forEach((name, index) => {
+                    const checkbox = document.getElementById(`person_${index}`);
+                    const isSelected = window.savedSelectedPersons.includes(name);
+                    checkbox.checked = isSelected;
+                    if (isSelected) {
+                        checkbox.parentElement.classList.add('selected');
+                    } else {
+                        checkbox.parentElement.classList.remove('selected');
+                    }
+                });
+            }
+        }
+
+        // 초기화 (위탁 + 사입 개수 초기화, 분배 결과는 유지)
+        function resetAll() {
+            if (confirm('위탁/사입 개수를 초기화하시겠습니까?\n(분배 결과는 유지됩니다)')) {
+                products.forEach(p => {
+                    p.stock = 0;
+                    p.buyStock = 0;
+                });
+                renderProductTable();
+                // 가격 정보는 유지하고 재고만 초기화하여 저장
+                saveToLocalStorageSilent();
+            }
+        }
+
+        // 분배 결과 초기화 (결과 섹션 숨기고 저장된 분배 데이터 삭제)
+        function clearDistribution() {
+            if (confirm('분배 결과를 초기화하시겠습니까?')) {
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('resultsGrid').innerHTML = '';
+                document.getElementById('summary').innerHTML = '';
+                document.getElementById('distributionTime').textContent = '';
+                localStorage.removeItem('hyundaimall_distribution');
+                localStorage.removeItem('hyundaimall_ordered');
+            }
+        }
+
+        // 조용히 저장 (알림 없이)
+        function saveToLocalStorageSilent() {
+            products.forEach(p => updateProduct(p.id));
+            const selectedPersons = getSelectedPersons();
+            const data = {
+                products: products.map(p => ({ id: p.id, price: p.price, stock: p.stock, buyStock: p.buyStock })),
+                selectedPersons: selectedPersons
+            };
+            localStorage.setItem('hyundaimall_fair', JSON.stringify(data));
+        }
+
+        // 재고 데이터 복사 (위탁 + 사입 + 선택된 인원)
+        function copyStockData() {
+            products.forEach(p => updateProduct(p.id));
+
+            // 재고가 0보다 큰 상품만 복사 (위탁 또는 사입)
+            const dataLines = products
+                .filter(p => p.stock > 0 || p.buyStock > 0)
+                .map(p => `${p.name}\t${p.price}\t${p.stock}\t${p.buyStock}`)
+                .join('\n');
+
+            // 선택된 인원 목록 추가
+            const selectedPersons = getSelectedPersons();
+            const personsLine = `[선택인원]\t${selectedPersons.join(',')}`;
+
+            const fullData = dataLines + '\n' + personsLine;
+
+            if (!dataLines) {
+                alert('복사할 재고 데이터가 없습니다.');
+                return;
+            }
+
+            navigator.clipboard.writeText(fullData).then(() => {
+                alert(`재고 데이터가 복사되었습니다!\n(위탁/사입 + 선택인원 ${selectedPersons.length}명)`);
+            }).catch(err => {
+                // 클립보드 실패 시 대안
+                const textArea = document.createElement('textarea');
+                textArea.value = fullData;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert(`재고 데이터가 복사되었습니다!\n(위탁/사입 + 선택인원 ${selectedPersons.length}명)`);
+            });
+        }
+
+        // 붙여넣기 모달 열기
+        function showPasteModal() {
+            document.getElementById('pasteModal').style.display = 'flex';
+            document.getElementById('pasteArea').value = '';
+            document.getElementById('pasteArea').focus();
+        }
+
+        // 붙여넣기 모달 닫기
+        function closePasteModal() {
+            document.getElementById('pasteModal').style.display = 'none';
+        }
+
+        // 붙여넣은 데이터 적용 (위탁 + 사입 + 선택된 인원)
+        function applyPastedData() {
+            const pasteArea = document.getElementById('pasteArea');
+            const data = pasteArea.value.trim();
+
+            if (!data) {
+                alert('데이터를 붙여넣기 해주세요.');
+                return;
+            }
+
+            const lines = data.split('\n');
+            let appliedCount = 0;
+            let personsApplied = false;
+
+            lines.forEach(line => {
+                const parts = line.split('\t');
+
+                // 선택된 인원 라인 처리
+                if (parts[0] === '[선택인원]' && parts[1]) {
+                    const selectedNames = parts[1].split(',').map(n => n.trim());
+                    persons.forEach((name, index) => {
+                        const checkbox = document.getElementById(`person_${index}`);
+                        const isSelected = selectedNames.includes(name);
+                        checkbox.checked = isSelected;
+                        if (isSelected) {
+                            checkbox.parentElement.classList.add('selected');
+                        } else {
+                            checkbox.parentElement.classList.remove('selected');
+                        }
+                    });
+                    personsApplied = true;
+                    return;
+                }
+
+                // 상품 데이터 처리 (위탁 + 사입)
+                if (parts.length >= 3) {
+                    const name = parts[0].trim();
+                    const price = parseInt(parts[1]) || 0;
+                    const stock = parseInt(parts[2]) || 0;
+                    const buyStock = parseInt(parts[3]) || 0; // 사입 (4번째 컬럼)
+
+                    const product = products.find(p => p.name === name);
+                    if (product) {
+                        product.price = price;
+                        product.stock = stock;
+                        product.buyStock = buyStock;
+                        appliedCount++;
+                    }
+                }
+            });
+
+            if (appliedCount > 0 || personsApplied) {
+                renderProductTable();
+                closePasteModal();
+                let msg = `${appliedCount}개 상품의 재고 데이터가 적용되었습니다.`;
+                if (personsApplied) {
+                    msg += `\n선택된 인원도 복원되었습니다.`;
+                }
+                alert(msg);
+            } else {
+                alert('적용할 수 있는 데이터가 없습니다.\n형식: 상품명[탭]가격[탭]위탁[탭]사입');
+            }
+        }
+
+        // 주문 완료 토글
+        function toggleOrder(personIndex, itemId) {
+            const checkbox = document.getElementById(itemId);
+            const li = document.getElementById(itemId + '_li');
+            const card = document.getElementById(`card_${personIndex}`);
+            const badge = document.getElementById(`badge_${personIndex}`);
+            const itemCount = parseInt(card.dataset.itemCount);
+
+            if (li.classList.contains('ordered')) {
+                li.classList.remove('ordered');
+                checkbox.innerHTML = '';
+            } else {
+                li.classList.add('ordered');
+                checkbox.innerHTML = '✓';
+            }
+
+            // 체크된 개수 계산
+            const checkedCount = card.querySelectorAll('li.ordered').length;
+
+            // 뱃지 업데이트
+            if (checkedCount === itemCount) {
+                badge.textContent = '완료!';
+                badge.classList.add('done');
+                card.classList.add('completed');
+            } else {
+                badge.textContent = `${checkedCount}/${itemCount}`;
+                badge.classList.remove('done');
+                card.classList.remove('completed');
+            }
+
+            // 체크 상태 저장
+            saveOrderStatus();
+        }
+
+        // 분배 결과 저장
+        function saveDistributionResults(results, stockRemaining, buyAssignments = {}) {
+            const now = new Date();
+            const timeString = formatDistributionTime(now);
+            const data = {
+                results: results.map(r => ({
+                    personName: r.personName,
+                    items: r.items,
+                    total: r.total,
+                    tier: r.tier
+                })),
+                stockRemaining: stockRemaining,
+                buyAssignments: buyAssignments,
+                savedAt: now.toISOString(),
+                timeString: timeString
+            };
+            localStorage.setItem('hyundaimall_distribution', JSON.stringify(data));
+
+            // 실행 시간 표시
+            document.getElementById('distributionTime').textContent = `(${timeString} 실행)`;
+        }
+
+        // 분배 시간 포맷
+        function formatDistributionTime(date) {
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const hours = date.getHours();
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const ampm = hours < 12 ? '오전' : '오후';
+            const hour12 = hours % 12 || 12;
+            return `${month}/${day} ${ampm} ${hour12}:${minutes}`;
+        }
+
+        // 주문 체크 상태 저장
+        function saveOrderStatus() {
+            const orderedItems = [];
+            document.querySelectorAll('li.ordered').forEach(li => {
+                orderedItems.push(li.id);
+            });
+            localStorage.setItem('hyundaimall_ordered', JSON.stringify(orderedItems));
+        }
+
+        // 저장된 분배 결과 복원
+        function restoreDistributionResults() {
+            const savedData = localStorage.getItem('hyundaimall_distribution');
+            const savedOrdered = localStorage.getItem('hyundaimall_ordered');
+
+            if (savedData) {
+                try {
+                    const data = JSON.parse(savedData);
+                    const orderedItems = savedOrdered ? JSON.parse(savedOrdered) : [];
+
+                    displayResults(data.results, data.stockRemaining, data.buyAssignments || {});
+
+                    // 실행 시간 복원
+                    if (data.timeString) {
+                        document.getElementById('distributionTime').textContent = `(${data.timeString} 실행)`;
+                    } else if (data.savedAt) {
+                        // 이전 형식 호환 (savedAt만 있는 경우)
+                        const savedDate = new Date(data.savedAt);
+                        document.getElementById('distributionTime').textContent = `(${formatDistributionTime(savedDate)} 실행)`;
+                    }
+
+                    // 체크 상태 복원
+                    setTimeout(() => {
+                        orderedItems.forEach(liId => {
+                            const li = document.getElementById(liId);
+                            if (li) {
+                                li.classList.add('ordered');
+                                const checkbox = li.querySelector('.order-check');
+                                if (checkbox) checkbox.innerHTML = '✓';
+                            }
+                        });
+
+                        // 뱃지 업데이트
+                        document.querySelectorAll('.person-card').forEach(card => {
+                            const personIndex = card.id.replace('card_', '');
+                            const badge = document.getElementById(`badge_${personIndex}`);
+                            const itemCount = parseInt(card.dataset.itemCount);
+                            const checkedCount = card.querySelectorAll('li.ordered').length;
+
+                            if (checkedCount === itemCount) {
+                                badge.textContent = '완료!';
+                                badge.classList.add('done');
+                                card.classList.add('completed');
+                            } else {
+                                badge.textContent = `${checkedCount}/${itemCount}`;
+                            }
+                        });
+                    }, 100);
+                } catch (e) {
+                    console.error('분배 결과 복원 실패:', e);
+                }
+            }
+        }
+
+        // 페이지 로드 시 초기화
+        init();
+        restoreDistributionResults();
+    </script>
+</body>
+</html>
