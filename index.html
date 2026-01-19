@@ -396,11 +396,11 @@
             { id: 29, name: '모던에디션 베스트', price: 99200, stock: 0, buyStock: 0, required: false },
         ];
 
-        // 목표 금액 범위 (min 이상 ~ max 미만)
+        // 목표 금액 범위 (min 이상 ~ max 이하)
         const TARGET_TIERS = [
             { min: 500000, max: 515000, name: '50만', class: 'tier-50' },
-            { min: 400000, max: 500000, name: '40만', class: 'tier-40' },
-            { min: 300000, max: 400000, name: '30만', class: 'tier-30' },
+            { min: 400000, max: 415000, name: '40만', class: 'tier-40' },
+            { min: 300000, max: 315000, name: '30만', class: 'tier-30' },
         ];
         const MIN_ORDER = 50000; // 최소 5만원
 
@@ -802,9 +802,9 @@
             results.forEach(result => {
                 if (result.total >= 500000 && result.total <= 515000) {
                     result.tier = TARGET_TIERS[0]; // 50만
-                } else if (result.total >= 400000 && result.total < 500000) {
+                } else if (result.total >= 400000 && result.total <= 415000) {
                     result.tier = TARGET_TIERS[1]; // 40만
-                } else if (result.total >= 300000 && result.total < 400000) {
+                } else if (result.total >= 300000 && result.total <= 315000) {
                     result.tier = TARGET_TIERS[2]; // 30만
                 } else {
                     result.tier = { name: '미달', class: 'tier-under' };
