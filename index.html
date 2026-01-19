@@ -1470,7 +1470,8 @@
             let personsApplied = false;
 
             lines.forEach(line => {
-                const parts = line.split('\t');
+                // 탭 또는 2개 이상 공백을 구분자로 인식 (Slack 복사 대응)
+                const parts = line.split(/\t|  +/).map(s => s.trim()).filter(s => s);
 
                 // 선택된 인원 라인 처리
                 if (parts[0] === '[선택인원]' && parts[1]) {
@@ -1489,18 +1490,17 @@
                     return;
                 }
 
-                // 상품 데이터 처리 (위탁 + 사입)
-                if (parts.length >= 3) {
+                // 상품 데이터 처리 - 상품명으로 매칭 (순서 무관)
+                if (parts.length >= 2) {
                     const name = parts[0].trim();
-                    const price = parseInt(parts[1]) || 0;
-                    const stock = parseInt(parts[2]) || 0;
-                    const buyStock = parseInt(parts[3]) || 0; // 사입 (4번째 컬럼)
-
                     const product = products.find(p => p.name === name);
+
                     if (product) {
-                        product.price = price;
-                        product.stock = stock;
-                        product.buyStock = buyStock;
+                        // 숫자들 추출 (가격, 위탁, 사입)
+                        const numbers = parts.slice(1).map(s => parseInt(s) || 0);
+                        if (numbers.length >= 1) product.price = numbers[0];
+                        if (numbers.length >= 2) product.stock = numbers[1];
+                        if (numbers.length >= 3) product.buyStock = numbers[2];
                         appliedCount++;
                     }
                 }
