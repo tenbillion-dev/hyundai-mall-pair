@@ -742,76 +742,174 @@
             saveToLocalStorageSilent();
         }
 
-        // 균등 분배: 금액 낮은 사람부터 돌아가면서 상품 배정
-        // 목표: 모든 사람 30만원 이상 달성, 재고 최대 소진
+        // 스마트 분배: 각 사람마다 tier 범위에 정확히 맞는 조합 찾기
+        // 목표: 최소 재고로 최대 tier 충족
         function distributeEvenly(results, stockRemaining, targetMin, targetMax) {
             let currentStock = { ...stockRemaining };
-            const MAX_TOTAL = 515000; // 50만원 상한
 
-            // 재고가 있는 동안 계속 배정
-            let improved = true;
-            while (improved) {
-                improved = false;
+            // 각 사람마다 tier에 맞는 조합 찾기
+            for (let i = 0; i < results.length; i++) {
+                const result = results[i];
 
-                // 금액 낮은 순으로 정렬 (모든 사람 대상)
-                const sortedPersons = results
-                    .map((r, idx) => ({ result: r, index: idx }))
-                    .filter(item => item.result.total < MAX_TOTAL) // 50만원 미만인 사람만
-                    .sort((a, b) => a.result.total - b.result.total);
+                // 30만 → 40만 → 50만 순으로 시도 (낮은 tier부터)
+                const tiersToTry = [TARGET_TIERS[2], TARGET_TIERS[1], TARGET_TIERS[0]]; // 30만, 40만, 50만
 
-                if (sortedPersons.length === 0) break;
-
-                // 가장 금액 낮은 사람에게 상품 배정
-                const { result } = sortedPersons[0];
-
-                // 배정 가능한 상품 찾기
-                const availableProducts = products
-                    .filter(p => {
-                        if (p.required) return false;
-                        if (p.price <= 0 || currentStock[p.id] <= 0) return false;
-                        // 50만원 상한 초과 방지
-                        if (result.total + p.price > MAX_TOTAL) return false;
-
-                        const currentQty = result.productCounts[p.id] || 0;
-                        if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
-                        if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
-                        return currentQty < MAX_SAME_PRODUCT;
-                    })
-                    .sort((a, b) => b.price - a.price); // 비싼 상품 우선
-
-                if (availableProducts.length > 0) {
-                    const product = availableProducts[0];
-
-                    // 상품 추가
-                    const existingItem = result.items.find(item => item.id === product.id);
-                    if (existingItem) {
-                        existingItem.qty++;
-                    } else {
-                        result.items.push({ ...product, qty: 1 });
+                let found = false;
+                for (const tier of tiersToTry) {
+                    const combination = findCombinationForTier(result, tier, currentStock);
+                    if (combination) {
+                        // 조합 적용
+                        results[i] = combination.result;
+                        currentStock = combination.usedStock;
+                        found = true;
+                        console.log(`${result.personName}: ${tier.name} 달성 (${combination.result.total.toLocaleString()}원)`);
+                        break;
                     }
-                    result.total += product.price;
-                    result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
-                    currentStock[product.id]--;
-                    improved = true;
+                }
 
-                    console.log(`${result.personName}: +${product.name} → ${result.total.toLocaleString()}원`);
+                if (!found) {
+                    result.tier = { name: '미달', class: 'tier-under' };
+                    console.log(`${result.personName}: 미달 (${result.total.toLocaleString()}원) - 어떤 tier도 달성 불가`);
                 }
             }
 
-            // 최종 tier 판정
-            results.forEach(result => {
-                if (result.total >= 500000 && result.total <= 515000) {
-                    result.tier = TARGET_TIERS[0]; // 50만
-                } else if (result.total >= 400000 && result.total <= 415000) {
-                    result.tier = TARGET_TIERS[1]; // 40만
-                } else if (result.total >= 300000 && result.total <= 315000) {
-                    result.tier = TARGET_TIERS[2]; // 30만
-                } else {
-                    result.tier = { name: '미달', class: 'tier-under' };
-                }
-            });
-
             return currentStock;
+        }
+
+        // 특정 tier 범위에 맞는 상품 조합 찾기 (DFS + 가지치기)
+        function findCombinationForTier(baseResult, targetTier, stockRemaining) {
+            const targetMin = targetTier.min;
+            const targetMax = targetTier.max;
+
+            // 이미 범위 내면 성공
+            if (baseResult.total >= targetMin && baseResult.total <= targetMax) {
+                return {
+                    result: { ...baseResult, tier: targetTier },
+                    usedStock: { ...stockRemaining }
+                };
+            }
+
+            // 이미 상한 초과면 실패
+            if (baseResult.total > targetMax) {
+                return null;
+            }
+
+            // 필요한 추가 금액
+            const needed = targetMin - baseResult.total;
+            const maxAdd = targetMax - baseResult.total;
+
+            // 사용 가능한 상품 목록 (재고 있고, 구매 제한 안 넘은 것)
+            const availableProducts = products
+                .filter(p => {
+                    if (p.required) return false;
+                    if (p.price <= 0 || stockRemaining[p.id] <= 0) return false;
+
+                    const currentQty = baseResult.productCounts[p.id] || 0;
+                    if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                    if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                    return currentQty < MAX_SAME_PRODUCT;
+                })
+                .sort((a, b) => b.price - a.price); // 비싼 것부터
+
+            if (availableProducts.length === 0 && baseResult.total < targetMin) {
+                return null;
+            }
+
+            // DFS로 조합 찾기
+            let bestResult = null;
+
+            function dfs(idx, currentItems, currentTotal, currentCounts, tempStock, depth) {
+                // 범위 내 도달하면 성공
+                if (currentTotal >= targetMin && currentTotal <= targetMax) {
+                    if (!bestResult || currentItems.length < bestResult.items.length) {
+                        bestResult = {
+                            items: currentItems.map(item => ({ ...item })),
+                            total: currentTotal,
+                            productCounts: { ...currentCounts },
+                            usedStock: { ...tempStock }
+                        };
+                    }
+                    return;
+                }
+
+                // 상한 초과하면 중단
+                if (currentTotal > targetMax) {
+                    return;
+                }
+
+                // 깊이 제한 (성능)
+                if (depth > 15) {
+                    return;
+                }
+
+                // 모든 상품 탐색 완료
+                if (idx >= availableProducts.length) {
+                    return;
+                }
+
+                const product = availableProducts[idx];
+                const currentQty = currentCounts[product.id] || 0;
+                const stockLeft = tempStock[product.id] || 0;
+
+                // 최대 추가 가능 개수
+                let maxQty = 0;
+                if (LIMITED_PRODUCTS.includes(product.id)) {
+                    maxQty = Math.min(1 - currentQty, stockLeft);
+                } else if (UNLIMITED_PRODUCTS.includes(product.id)) {
+                    maxQty = Math.min(MAX_UNLIMITED_PRODUCT - currentQty, stockLeft);
+                } else {
+                    maxQty = Math.min(MAX_SAME_PRODUCT - currentQty, stockLeft);
+                }
+
+                // 이 상품 0개~maxQty개 추가하는 경우 탐색
+                for (let qty = 0; qty <= maxQty; qty++) {
+                    const newTotal = currentTotal + product.price * qty;
+
+                    // 가지치기: 상한 초과하면 더 추가해도 의미 없음
+                    if (newTotal > targetMax) break;
+
+                    const newItems = [...currentItems];
+                    const newCounts = { ...currentCounts };
+                    const newStock = { ...tempStock };
+
+                    if (qty > 0) {
+                        const existingItem = newItems.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.qty += qty;
+                        } else {
+                            newItems.push({ ...product, qty: qty });
+                        }
+                        newCounts[product.id] = (newCounts[product.id] || 0) + qty;
+                        newStock[product.id] -= qty;
+                    }
+
+                    dfs(idx + 1, newItems, newTotal, newCounts, newStock, depth + 1);
+
+                    // 이미 좋은 결과 찾았으면 조기 종료
+                    if (bestResult) return;
+                }
+            }
+
+            // 기존 아이템 복사
+            const startItems = baseResult.items.map(item => ({ ...item }));
+            const startCounts = { ...baseResult.productCounts };
+
+            dfs(0, startItems, baseResult.total, startCounts, { ...stockRemaining }, 0);
+
+            if (bestResult) {
+                return {
+                    result: {
+                        personName: baseResult.personName,
+                        items: bestResult.items,
+                        total: bestResult.total,
+                        tier: targetTier,
+                        productCounts: bestResult.productCounts
+                    },
+                    usedStock: bestResult.usedStock
+                };
+            }
+
+            return null;
         }
 
         // 남은 재고로 tier 업그레이드 (30만→40만→50만)
