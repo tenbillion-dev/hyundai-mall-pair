@@ -683,16 +683,14 @@
                 console.log(`${assignment.personName}: 필수품 합계 ${baseTotal.toLocaleString()}원`);
             });
 
-            // 4. 각 아이디에게 tier 채우기 (30만 → 40만 → 50만 순으로 보수적 접근)
+            // 4. 모든 아이디에게 필수 상품 먼저 배정
             const finalResults = [];
             let currentStock = { ...workingStock };
 
             for (let i = 0; i < targetPersons; i++) {
                 const assignment = personAssignments[i];
                 const personName = assignment.personName;
-                const remainingPersons = targetPersons - i - 1;
 
-                // 기본 결과 (필수 상품만)
                 const result = {
                     personName: personName,
                     items: [],
@@ -721,21 +719,15 @@
                     result.productCounts[9] = 1;
                 }
 
-                // 1단계: 30만원 달성 시도 (모든 아이디가 최소 tier 달성 우선)
-                const tier30Result = tryFillTierMaximize(result, TARGET_TIERS[2], currentStock);
-                if (tier30Result) {
-                    finalResults.push(tier30Result.result);
-                    currentStock = tier30Result.usedStock;
-                    console.log(`${personName}: 30만 달성 (${tier30Result.result.total.toLocaleString()}원)`);
-                } else {
-                    // 30만원도 안 되면 미달
-                    result.tier = { name: '미달', class: 'tier-under' };
-                    finalResults.push(result);
-                    console.log(`${personName}: 미달 (${result.total.toLocaleString()}원)`);
-                }
+                result.tier = { name: '미달', class: 'tier-under' };
+                finalResults.push(result);
+                console.log(`${personName}: 필수품 배정 완료 (${result.total.toLocaleString()}원)`);
             }
 
-            // 2단계: 남은 재고로 tier 업그레이드 시도 (30만 → 40만 → 50만)
+            // 5. 균등 분배: 모든 사람에게 돌아가면서 상품 배정 (30만원 목표)
+            currentStock = distributeEvenly(finalResults, currentStock, 300000, 315000);
+
+            // 6. 남은 재고로 tier 업그레이드 시도 (30만 → 40만 → 50만)
             currentStock = upgradeTiers(finalResults, currentStock);
 
             // 사입 항목 계산 (각 상품별로 뒤에서부터 사입 개수만큼 사입으로 표시)
@@ -750,7 +742,146 @@
             saveToLocalStorageSilent();
         }
 
-        // 2단계: 남은 재고로 tier 업그레이드 (30만→40만→50만)
+        // 균등 분배: 금액 낮은 사람부터 돌아가면서 상품 배정
+        function distributeEvenly(results, stockRemaining, targetMin, targetMax) {
+            let currentStock = { ...stockRemaining };
+            let improved = true;
+
+            while (improved) {
+                improved = false;
+
+                // 금액 낮은 순으로 정렬 (30만원 미달인 사람 우선)
+                const sortedPersons = results
+                    .map((r, idx) => ({ result: r, index: idx }))
+                    .filter(item => item.result.total < targetMin) // 30만원 미만인 사람만
+                    .sort((a, b) => a.result.total - b.result.total);
+
+                // 모두 30만원 이상이면 종료
+                if (sortedPersons.length === 0) {
+                    console.log('=== 모든 사람 30만원 이상 달성! ===');
+                    break;
+                }
+
+                // 가장 금액 낮은 사람에게 상품 배정
+                const { result } = sortedPersons[0];
+
+                // 배정 가능한 상품 찾기 (30만원 범위 내에서 최적 선택)
+                const availableProducts = products
+                    .filter(p => {
+                        if (p.required) return false;
+                        if (p.price <= 0 || currentStock[p.id] <= 0) return false;
+
+                        const currentQty = result.productCounts[p.id] || 0;
+                        if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                        if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                        return currentQty < MAX_SAME_PRODUCT;
+                    })
+                    .map(p => ({
+                        ...p,
+                        newTotal: result.total + p.price,
+                        // 30만원 범위(300,000~315,000)에 들어가면 최우선
+                        inRange: (result.total + p.price) >= targetMin && (result.total + p.price) <= targetMax,
+                        // 30만원 초과하지 않는 선에서 가장 비싼 것 선호
+                        underTarget: (result.total + p.price) <= targetMax
+                    }))
+                    .filter(p => p.underTarget) // 30만원 상한 초과 제외
+                    .sort((a, b) => {
+                        // 1순위: 30만원 범위 안에 들어가는 상품
+                        if (a.inRange && !b.inRange) return -1;
+                        if (!a.inRange && b.inRange) return 1;
+                        // 2순위: 가격 높은 순 (빨리 30만원 채우기)
+                        return b.price - a.price;
+                    });
+
+                if (availableProducts.length > 0) {
+                    const product = availableProducts[0];
+
+                    // 상품 추가
+                    const existingItem = result.items.find(item => item.id === product.id);
+                    if (existingItem) {
+                        existingItem.qty++;
+                    } else {
+                        result.items.push({ ...product, qty: 1 });
+                    }
+                    result.total += product.price;
+                    result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+                    currentStock[product.id]--;
+                    improved = true;
+
+                    // tier 업데이트
+                    if (result.total >= targetMin && result.total <= targetMax) {
+                        result.tier = TARGET_TIERS[2]; // 30만
+                        console.log(`${result.personName}: 30만 달성! (${result.total.toLocaleString()}원)`);
+                    } else {
+                        console.log(`${result.personName}: +${product.name} → ${result.total.toLocaleString()}원`);
+                    }
+                } else {
+                    // 이 사람에게 더 배정할 상품이 없음 (30만원 상한 때문)
+                    // 다른 사람에게 기회 주기 위해 이 사람은 스킵
+                    console.log(`${result.personName}: 30만원 범위 내 배정 가능 상품 없음`);
+                    break;
+                }
+            }
+
+            // 남은 재고가 있으면 미달자에게 추가 배정 (30만원 못 채워도)
+            improved = true;
+            while (improved) {
+                improved = false;
+
+                const underPersons = results
+                    .map((r, idx) => ({ result: r, index: idx }))
+                    .filter(item => item.result.tier?.name === '미달')
+                    .sort((a, b) => a.result.total - b.result.total);
+
+                if (underPersons.length === 0) break;
+
+                for (const { result } of underPersons) {
+                    const availableProducts = products
+                        .filter(p => {
+                            if (p.required) return false;
+                            if (p.price <= 0 || currentStock[p.id] <= 0) return false;
+                            // 50만원 상한 초과 방지
+                            if (result.total + p.price > 515000) return false;
+
+                            const currentQty = result.productCounts[p.id] || 0;
+                            if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
+                            if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
+                            return currentQty < MAX_SAME_PRODUCT;
+                        })
+                        .sort((a, b) => b.price - a.price);
+
+                    if (availableProducts.length > 0) {
+                        const product = availableProducts[0];
+
+                        const existingItem = result.items.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.qty++;
+                        } else {
+                            result.items.push({ ...product, qty: 1 });
+                        }
+                        result.total += product.price;
+                        result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+                        currentStock[product.id]--;
+                        improved = true;
+
+                        // tier 체크
+                        if (result.total >= 300000 && result.total <= 315000) {
+                            result.tier = TARGET_TIERS[2];
+                        } else if (result.total >= 400000 && result.total <= 415000) {
+                            result.tier = TARGET_TIERS[1];
+                        } else if (result.total >= 500000 && result.total <= 515000) {
+                            result.tier = TARGET_TIERS[0];
+                        }
+
+                        console.log(`${result.personName}: 추가 배정 → ${result.total.toLocaleString()}원`);
+                    }
+                }
+            }
+
+            return currentStock;
+        }
+
+        // 남은 재고로 tier 업그레이드 (30만→40만→50만)
         function upgradeTiers(results, stockRemaining) {
             let currentStock = { ...stockRemaining };
             let upgraded = true;
