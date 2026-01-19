@@ -776,7 +776,7 @@
             return currentStock;
         }
 
-        // 특정 tier 범위에 맞는 상품 조합 찾기 (DFS + 가지치기)
+        // 특정 tier 범위에 맞는 상품 조합 찾기 (Greedy + 백트래킹)
         function findCombinationForTier(baseResult, targetTier, stockRemaining) {
             const targetMin = targetTier.min;
             const targetMax = targetTier.max;
@@ -794,122 +794,220 @@
                 return null;
             }
 
-            // 필요한 추가 금액
-            const needed = targetMin - baseResult.total;
-            const maxAdd = targetMax - baseResult.total;
+            // 작업용 복사본
+            const result = {
+                personName: baseResult.personName,
+                items: baseResult.items.map(item => ({ ...item })),
+                total: baseResult.total,
+                tier: null,
+                productCounts: { ...baseResult.productCounts }
+            };
+            const tempStock = { ...stockRemaining };
 
-            // 사용 가능한 상품 목록 (재고 있고, 구매 제한 안 넘은 것)
+            // 1단계: Greedy로 목표 범위 근처까지 채우기
+            let improved = true;
+            while (improved && result.total < targetMin) {
+                improved = false;
+
+                // 추가 가능한 상품 목록
+                const availableProducts = getAvailableProducts(result.productCounts, tempStock);
+
+                // 목표까지 남은 금액
+                const remaining = targetMin - result.total;
+                const maxRemaining = targetMax - result.total;
+
+                // 범위 내로 딱 맞출 수 있는 상품 찾기
+                let bestProduct = null;
+                let bestDiff = Infinity;
+
+                for (const product of availableProducts) {
+                    // 이 상품 추가 시 범위 내 들어오는지 확인
+                    const newTotal = result.total + product.price;
+                    if (newTotal >= targetMin && newTotal <= targetMax) {
+                        // 범위 내 들어오면 바로 선택
+                        bestProduct = product;
+                        break;
+                    }
+                    // 아직 부족하면 가장 적게 부족한 상품 선택
+                    if (newTotal < targetMin) {
+                        const diff = targetMin - newTotal;
+                        if (diff < bestDiff) {
+                            bestDiff = diff;
+                            bestProduct = product;
+                        }
+                    }
+                }
+
+                if (bestProduct) {
+                    addProductToResult(result, bestProduct, tempStock);
+                    improved = true;
+                }
+            }
+
+            // 범위 내 도달했으면 성공
+            if (result.total >= targetMin && result.total <= targetMax) {
+                result.tier = targetTier;
+                return { result, usedStock: tempStock };
+            }
+
+            // 2단계: 범위 초과했으면 백트래킹으로 조정
+            if (result.total > targetMax) {
+                // 마지막 추가 상품 제거하고 다른 조합 시도
+                return tryBacktracking(baseResult, targetTier, stockRemaining);
+            }
+
+            // 3단계: 아직 부족하면 작은 상품 조합으로 채우기 시도
+            const smallProducts = getAvailableProducts(result.productCounts, tempStock)
+                .filter(p => p.price <= (targetMax - result.total))
+                .sort((a, b) => a.price - b.price); // 싼 것부터
+
+            for (const product of smallProducts) {
+                const maxCanAdd = getMaxAddableQty(product, result.productCounts, tempStock);
+                for (let qty = 1; qty <= maxCanAdd; qty++) {
+                    const newTotal = result.total + product.price * qty;
+                    if (newTotal >= targetMin && newTotal <= targetMax) {
+                        for (let i = 0; i < qty; i++) {
+                            addProductToResult(result, product, tempStock);
+                        }
+                        result.tier = targetTier;
+                        return { result, usedStock: tempStock };
+                    }
+                }
+            }
+
+            // 모든 조합 실패
+            return null;
+        }
+
+        // 백트래킹으로 다른 조합 시도
+        function tryBacktracking(baseResult, targetTier, stockRemaining) {
+            const targetMin = targetTier.min;
+            const targetMax = targetTier.max;
+
+            // 사용 가능한 상품 목록 (가격순 정렬)
             const availableProducts = products
                 .filter(p => {
                     if (p.required) return false;
                     if (p.price <= 0 || stockRemaining[p.id] <= 0) return false;
-
                     const currentQty = baseResult.productCounts[p.id] || 0;
-                    if (LIMITED_PRODUCTS.includes(p.id)) return currentQty < 1;
-                    if (UNLIMITED_PRODUCTS.includes(p.id)) return currentQty < MAX_UNLIMITED_PRODUCT;
-                    return currentQty < MAX_SAME_PRODUCT;
+                    return getMaxQtyForProduct(p, currentQty) > currentQty;
                 })
-                .sort((a, b) => b.price - a.price); // 비싼 것부터
+                .sort((a, b) => a.price - b.price); // 싼 것부터 시도
 
-            if (availableProducts.length === 0 && baseResult.total < targetMin) {
-                return null;
-            }
+            // BFS로 조합 찾기 (깊이 제한 있는 탐색)
+            const queue = [{
+                items: baseResult.items.map(item => ({ ...item })),
+                total: baseResult.total,
+                productCounts: { ...baseResult.productCounts },
+                stock: { ...stockRemaining },
+                depth: 0
+            }];
 
-            // DFS로 조합 찾기
-            let bestResult = null;
+            const visited = new Set();
+            visited.add(baseResult.total);
 
-            function dfs(idx, currentItems, currentTotal, currentCounts, tempStock, depth) {
-                // 범위 내 도달하면 성공
-                if (currentTotal >= targetMin && currentTotal <= targetMax) {
-                    if (!bestResult || currentItems.length < bestResult.items.length) {
-                        bestResult = {
-                            items: currentItems.map(item => ({ ...item })),
-                            total: currentTotal,
-                            productCounts: { ...currentCounts },
-                            usedStock: { ...tempStock }
+            while (queue.length > 0) {
+                const current = queue.shift();
+
+                if (current.depth > 20) continue; // 깊이 제한
+
+                for (const product of availableProducts) {
+                    const currentQty = current.productCounts[product.id] || 0;
+                    const stockLeft = current.stock[product.id] || 0;
+                    const maxQty = Math.min(getMaxQtyForProduct(product, currentQty) - currentQty, stockLeft);
+
+                    if (maxQty <= 0) continue;
+
+                    const newTotal = current.total + product.price;
+
+                    // 이미 방문한 금액이면 스킵 (중복 방지)
+                    if (visited.has(newTotal)) continue;
+                    visited.add(newTotal);
+
+                    // 상한 초과하면 스킵
+                    if (newTotal > targetMax) continue;
+
+                    // 새 상태 생성
+                    const newItems = current.items.map(item => ({ ...item }));
+                    const existingItem = newItems.find(item => item.id === product.id);
+                    if (existingItem) {
+                        existingItem.qty++;
+                    } else {
+                        newItems.push({ ...product, qty: 1 });
+                    }
+
+                    const newCounts = { ...current.productCounts };
+                    newCounts[product.id] = (newCounts[product.id] || 0) + 1;
+
+                    const newStock = { ...current.stock };
+                    newStock[product.id]--;
+
+                    // 범위 내 도달했으면 성공
+                    if (newTotal >= targetMin && newTotal <= targetMax) {
+                        return {
+                            result: {
+                                personName: baseResult.personName,
+                                items: newItems,
+                                total: newTotal,
+                                tier: targetTier,
+                                productCounts: newCounts
+                            },
+                            usedStock: newStock
                         };
                     }
-                    return;
+
+                    // 큐에 추가
+                    queue.push({
+                        items: newItems,
+                        total: newTotal,
+                        productCounts: newCounts,
+                        stock: newStock,
+                        depth: current.depth + 1
+                    });
                 }
-
-                // 상한 초과하면 중단
-                if (currentTotal > targetMax) {
-                    return;
-                }
-
-                // 깊이 제한 (성능)
-                if (depth > 15) {
-                    return;
-                }
-
-                // 모든 상품 탐색 완료
-                if (idx >= availableProducts.length) {
-                    return;
-                }
-
-                const product = availableProducts[idx];
-                const currentQty = currentCounts[product.id] || 0;
-                const stockLeft = tempStock[product.id] || 0;
-
-                // 최대 추가 가능 개수
-                let maxQty = 0;
-                if (LIMITED_PRODUCTS.includes(product.id)) {
-                    maxQty = Math.min(1 - currentQty, stockLeft);
-                } else if (UNLIMITED_PRODUCTS.includes(product.id)) {
-                    maxQty = Math.min(MAX_UNLIMITED_PRODUCT - currentQty, stockLeft);
-                } else {
-                    maxQty = Math.min(MAX_SAME_PRODUCT - currentQty, stockLeft);
-                }
-
-                // 이 상품 0개~maxQty개 추가하는 경우 탐색
-                for (let qty = 0; qty <= maxQty; qty++) {
-                    const newTotal = currentTotal + product.price * qty;
-
-                    // 가지치기: 상한 초과하면 더 추가해도 의미 없음
-                    if (newTotal > targetMax) break;
-
-                    const newItems = [...currentItems];
-                    const newCounts = { ...currentCounts };
-                    const newStock = { ...tempStock };
-
-                    if (qty > 0) {
-                        const existingItem = newItems.find(item => item.id === product.id);
-                        if (existingItem) {
-                            existingItem.qty += qty;
-                        } else {
-                            newItems.push({ ...product, qty: qty });
-                        }
-                        newCounts[product.id] = (newCounts[product.id] || 0) + qty;
-                        newStock[product.id] -= qty;
-                    }
-
-                    dfs(idx + 1, newItems, newTotal, newCounts, newStock, depth + 1);
-
-                    // 이미 좋은 결과 찾았으면 조기 종료
-                    if (bestResult) return;
-                }
-            }
-
-            // 기존 아이템 복사
-            const startItems = baseResult.items.map(item => ({ ...item }));
-            const startCounts = { ...baseResult.productCounts };
-
-            dfs(0, startItems, baseResult.total, startCounts, { ...stockRemaining }, 0);
-
-            if (bestResult) {
-                return {
-                    result: {
-                        personName: baseResult.personName,
-                        items: bestResult.items,
-                        total: bestResult.total,
-                        tier: targetTier,
-                        productCounts: bestResult.productCounts
-                    },
-                    usedStock: bestResult.usedStock
-                };
             }
 
             return null;
+        }
+
+        // 사용 가능한 상품 목록 가져오기
+        function getAvailableProducts(productCounts, stockRemaining) {
+            return products
+                .filter(p => {
+                    if (p.required) return false;
+                    if (p.price <= 0 || stockRemaining[p.id] <= 0) return false;
+                    const currentQty = productCounts[p.id] || 0;
+                    return getMaxQtyForProduct(p, currentQty) > currentQty;
+                })
+                .sort((a, b) => b.price - a.price); // 비싼 것부터
+        }
+
+        // 상품별 최대 구매 가능 개수
+        function getMaxQtyForProduct(product, currentQty) {
+            if (LIMITED_PRODUCTS.includes(product.id)) return 1;
+            if (UNLIMITED_PRODUCTS.includes(product.id)) return MAX_UNLIMITED_PRODUCT;
+            return MAX_SAME_PRODUCT;
+        }
+
+        // 추가 가능한 최대 개수
+        function getMaxAddableQty(product, productCounts, stockRemaining) {
+            const currentQty = productCounts[product.id] || 0;
+            const maxQty = getMaxQtyForProduct(product, currentQty);
+            const stockLeft = stockRemaining[product.id] || 0;
+            return Math.min(maxQty - currentQty, stockLeft);
+        }
+
+        // 결과에 상품 추가
+        function addProductToResult(result, product, tempStock) {
+            const existingItem = result.items.find(item => item.id === product.id);
+            if (existingItem) {
+                existingItem.qty++;
+            } else {
+                result.items.push({ ...product, qty: 1 });
+            }
+            result.total += product.price;
+            result.productCounts[product.id] = (result.productCounts[product.id] || 0) + 1;
+            tempStock[product.id]--;
         }
 
         // 남은 재고로 tier 업그레이드 (30만→40만→50만)
